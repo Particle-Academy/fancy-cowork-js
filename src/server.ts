@@ -18,6 +18,7 @@ import {
   type MiddlewareEntry,
   type PipelineContext,
   type Result,
+  isValidRef,
 } from "./engine";
 import { memoryStore, type CoworkStore } from "./store";
 import type {
@@ -147,7 +148,8 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
   async function identifyOrRefuse(req: Req): Promise<Participant | CoworkResponse> {
     if (!options.identify) return no(403, REASONS.unconfiguredIdentity);
     const who = await options.identify(req);
-    if (!who || typeof who.ref !== "string" || !who.ref) return no(401, "cowork.unidentified");
+    // A reserved name (__proto__, constructor, prototype) is never a ref: refs key state maps.
+    if (!who || !isValidRef(who.ref)) return no(401, "cowork.unidentified");
     return who;
   }
 

@@ -106,3 +106,61 @@ describe("globMatch", () => {
     expect(globMatch("x", "xx")).toBe(false);
   });
 });
+
+describe("peer-supplied refs can never reach Object.prototype (code scanning alert 1)", () => {
+  const RESERVED = ["__proto__", "constructor", "prototype"] as const;
+  const clean = () => {
+    for (const key of ["a", "polluted", "holder", "requests", "route", "revision"]) {
+      expect(Object.prototype).not.toHaveProperty(key);
+    }
+  };
+  const twoPeers = () => createSessionState({ id: "s", state: "live", starter: "a", participants: [{ ref: "a", route: "/" }, { ref: "b", route: "/" }], now: 0 });
+
+  for (const ref of RESERVED) {
+    it(`refuses ${ref} as the target view, a recipient and a grant target, and writes nothing`, async () => {
+      const h = host({ control: { mode: "free" } });
+      const asView = await evaluateIntent(h, twoPeers(), { from: "a", envelope: { view: ref, revision: 0 }, intent: { kind: "scroll", y: 1 }, now: 0 });
+      expect(asView.decision).toEqual({ allow: false, reason: "cowork.invalid.intent", status: 422 });
+      const asRecipient = await evaluateIntent(h, twoPeers(), { from: "a", envelope: { to: [ref] }, intent: { kind: "app", topic: "t", payload: 1 }, now: 0 });
+      expect(asRecipient.decision).toEqual({ allow: false, reason: "cowork.invalid.intent", status: 422 });
+      const baton = host({ control: { mode: "baton" } });
+      const asTarget = await evaluateIntent(baton, twoPeers(), { from: "a", envelope: { view: "a" }, intent: { kind: "control", op: "grant", target: ref }, now: 0 });
+      expect(asTarget.decision).toEqual({ allow: false, reason: "cowork.invalid.intent", status: 422 });
+      clean();
+    });
+
+    it(`refuses ${ref} as the sender`, async () => {
+      const result = await evaluateIntent(host({ control: { mode: "free" } }), twoPeers(), { from: ref, envelope: { view: "a", revision: 0 }, intent: { kind: "scroll", y: 1 }, now: 0 });
+      expect(result.decision).toEqual({ allow: false, reason: "cowork.unidentified", status: 401 });
+      clean();
+    });
+  }
+
+  it("keeps every ref-keyed state map null-prototype, after creation and after each commit", async () => {
+    const maps = (s: ReturnType<typeof twoPeers>) => [s.participants, s.control, s.last, s.rate, ...Object.values(s.last)];
+    const first = twoPeers();
+    for (const map of maps(first)) expect(Object.getPrototypeOf(map)).toBeNull();
+    const h = host({ control: { mode: "free" } });
+    const after = await evaluateIntent(h, first, { from: "b", envelope: { view: "a", revision: 0 }, intent: { kind: "field", handle: "h", value: 1 }, now: 5 });
+    expect(after.decision).toEqual({ allow: true });
+    expect(Object.keys(after.state.last)).toEqual(["a"]);
+    for (const map of maps(after.state)) expect(Object.getPrototypeOf(map)).toBeNull();
+  });
+
+  it("re-nulls the maps of a state that arrives as ordinary objects (a store round trip)", async () => {
+    const plain = JSON.parse(JSON.stringify(twoPeers()));
+    expect(Object.getPrototypeOf(plain.participants)).toBe(Object.prototype);
+    const after = await evaluateIntent(host({ control: { mode: "free" } }), plain, { from: "a", envelope: { view: "a", revision: 0 }, intent: { kind: "scroll", y: 1 }, now: 1 });
+    expect(after.decision).toEqual({ allow: true });
+    for (const map of [after.state.participants, after.state.control, after.state.last, after.state.rate]) {
+      expect(Object.getPrototypeOf(map)).toBeNull();
+    }
+  });
+
+  it("passes an app payload carrying a __proto__ key through unchanged and pollutes nothing", async () => {
+    const payload = JSON.parse('{"__proto__":{"polluted":true},"n":1}');
+    const result = await evaluateIntent(host({ control: { mode: "free" } }), twoPeers(), { from: "a", envelope: { to: ["b"] }, intent: { kind: "app", topic: "t", payload }, now: 0 });
+    expect(result.decision).toEqual({ allow: true });
+    clean();
+  });
+});

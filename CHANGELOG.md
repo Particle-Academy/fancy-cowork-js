@@ -45,3 +45,17 @@ First build (council change CC-fancy-0037). Not yet published.
 
 No third-party code: zero runtime dependencies. The dev dependencies are the kit's
 standard TypeScript toolchain (vitest, typescript, tsup, `@types/node`).
+
+### Security
+
+- **A peer-supplied ref can no longer reach `Object.prototype`** (code scanning alert 1,
+  `js/prototype-polluting-assignment`). The session's state maps are keyed by refs, and an
+  envelope `view` of `__proto__` resolved to `Object.prototype`, passed as a live
+  participant and was written onto. `__proto__`, `constructor` and `prototype` are now
+  never a ref: in `view`, `to` or a control `target` they are `cowork.invalid.intent`
+  (422), and a sender (or an `identify` answer) with one is `cowork.unidentified` (401).
+  Every ref-keyed state map is also null-prototype, rebuilt after every clone, so a state
+  read back from a store as ordinary objects is hardened too. The shared fixtures gain
+  the case, re-pinned at `67dbcbd8...9a45` in all three legs. Unreleased, so nobody has
+  shipped the hole.
+

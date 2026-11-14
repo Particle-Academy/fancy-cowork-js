@@ -98,6 +98,14 @@ describe("default deny, end to end", () => {
     expect(await h.cowork.start({})).toEqual({ status: 401, body: { reason: "cowork.unidentified" } });
   });
 
+  it("an identify that returns a reserved name is unidentified, never a participant", async () => {
+    for (const ref of ["__proto__", "constructor", "prototype"]) {
+      const h = host();
+      expect(await h.cowork.start({ who: ref })).toEqual({ status: 401, body: { reason: "cowork.unidentified" } });
+    }
+    expect(Object.prototype).not.toHaveProperty("route");
+  });
+
   it("an authorize that does not answer true refuses", async () => {
     const h = host({ authorize: () => "yes" as unknown as boolean });
     expect((await h.cowork.start(A)).body).toEqual({ reason: "cowork.denied.authorize" });

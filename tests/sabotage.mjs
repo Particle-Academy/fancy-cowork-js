@@ -48,6 +48,11 @@ const MUTATIONS = [
   ["host error swallowed as allow", "server.ts", 'return no(500, "cowork.host.error");', "return { status: 201, body: {} };"],
   ["presence signature omits channel_data", "pusher.ts", "`${input.socketId}:${input.channel}:${input.channelData}`", "`${input.socketId}:${input.channel}`"],
   ["socket id unchecked", "pusher.ts", 'if (!SOCKET_ID.test(input.socketId)) throw new TypeError("Invalid socket id.");', ""],
+  ["reserved refs accepted", "engine.ts", "!CONTROL_CHARS.test(v) && !isReserved(v);", "!CONTROL_CHARS.test(v);"],
+  ["sender ref unchecked", "engine.ts", "if (!isRef(from)) return refuse(REASONS.unidentified, 401);", ""],
+  ["state maps keep their prototype", "engine.ts", "const clone = (value: SessionState): SessionState => harden(structuredClone(value));", "const clone = (value: SessionState): SessionState => structuredClone(value);"],
+  ["fresh state has prototypes", "engine.ts", "  const participants = dict<ParticipantState>();", "  const participants: Record<Ref, ParticipantState> = {};"],
+  ["server accepts a reserved identity", "server.ts", "if (!who || !isValidRef(who.ref))", 'if (!who || typeof who.ref !== "string" || !who.ref)'],
 ];
 
 let survivors = 0;
