@@ -1,0 +1,69 @@
+{
+    "name": "@particle-academy/fancy-cowork",
+    "version": "0.1.0",
+    "description": "Generic human co-work sessions for Node: host-resolved identity, membership and policy (everything denied until bound), per-participant views with follow and drive, an intent pipeline with pluggable middleware, channel auth and audit events. The Node twin of particle-academy/fancy-cowork. No chat, zero runtime dependencies.",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Particle-Academy/fancy-cowork-js.git"
+    },
+    "homepage": "https://github.com/Particle-Academy/fancy-cowork-js#readme",
+    "bugs": "https://github.com/Particle-Academy/fancy-cowork-js/issues",
+    "type": "module",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
+        }
+    },
+    "files": [
+        "dist",
+        "conformance",
+        "README.md",
+        "CHANGELOG.md"
+    ],
+    "sideEffects": false,
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "lint": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "clean": "rm -rf dist",
+        "prepublishOnly": "tsup"
+    },
+    "keywords": [
+        "cowork",
+        "co-browse",
+        "collaboration",
+        "presence",
+        "human-plus",
+        "fancy",
+        "particle-academy"
+    ],
+    "devDependencies": {
+        "@types/node": "^22",
+        "tsup": "^8.5.0",
+        "typescript": "^5.8.0",
+        "vitest": "^4.1.12"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "license": "MIT",
+    "overrides": {
+        "esbuild": "^0.28.1",
+        "source-map-js": "^1.2.2"
+    }
+}
