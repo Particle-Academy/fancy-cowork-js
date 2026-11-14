@@ -39,7 +39,9 @@ const cowork = createCowork<MyRequest>({
   members: (session, p) => myPolicy.mayBeIn(session.id, p.ref),
   authorize: (p, ability, session, intent) => myPolicy.can(p.ref, ability, session.id),
   config: () => ({ consent: "notify", control: { mode: "baton" }, routing: "server" }),
-  broadcast: (channel, event, payload, exceptSocketId) => myReverb.trigger(channel, event, payload, exceptSocketId),
+  // Publish to your Pusher-protocol server's HTTP API (Genie's WebSockets service, Sockudo,
+  // Reverb, Pusher). The PHP leg ships this client as its `fancy-pusher` driver.
+  broadcast: (channel, event, payload, exceptSocketId) => myPusherProtocolClient.trigger(channel, event, payload, exceptSocketId),
   onEvent: (event) => myAudit.write(event),
 });
 
@@ -48,7 +50,7 @@ app.post("/cowork/sessions", async (req, res) => send(res, await cowork.start(re
 app.post("/cowork/sessions/:id/intents", async (req, res) => send(res, await cowork.intent(req, req.params.id, req.body)));
 app.get("/cowork/sessions/:id", async (req, res) => send(res, await cowork.sync(req, req.params.id)));
 
-// Channel auth for Echo / Reverb.
+// Channel auth for Echo or fancy-query's SocketEcho, against any Pusher-protocol server.
 app.post("/broadcasting/auth", async (req, res) => {
   const answer = await cowork.authorizeChannel(req, req.body.channel_name);
   if (answer.status !== 200) return send(res, answer);
