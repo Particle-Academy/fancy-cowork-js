@@ -130,6 +130,26 @@ createCowork({
   the sender and again at every receiver, in the browser (agent-integrations). This
   package still authorises the channel.
 
+### Presence intents: cursors and field activity through the server
+
+Cursors and "field active" signals are lossy, but they still need a trustworthy
+sender. Over direct whispers that sender is the `user_id` the socket server stamps on
+a presence-channel client event, and **Sockudo, including Genie's WebSockets service,
+never stamps it** (`user_id: None` in every version). So they are also intents:
+
+```ts
+{ kind: "cursor", route: "/doc/1", anchor: "title", fx: 0.4, fy: 0.6 } // or { route, x, y }
+{ kind: "activity", handle: "card.number", active: true }           // a handle, never a value
+```
+
+POST them to the intent endpoint like any other: the server stamps the authenticated
+sender and broadcasts them. They need no `view` or `revision`, change no session state,
+and `authorize` is asked `intent:cursor` / `intent:activity`. A cursor spends only its own
+bucket, `rate.cursorsPerSecond` (default 10, set it in your `config`); an activity spends
+the ordinary intent budget. The browser picks the path with agent-integrations'
+`presenceRouting`: **use `server` on Sockudo**; `direct` (whispers) works on Reverb and
+Pusher, which stamp senders.
+
 Channels: `presence-cowork.session.{id}` (membership and cursors; the member payload
 comes from the server), `private-cowork.participant.{ref}` (requests and activations).
 

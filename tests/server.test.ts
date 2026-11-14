@@ -339,3 +339,56 @@ describe("signPusherAuth", () => {
     expect(() => signPusherAuth({ key: "k", secret: "s", socketId: "1.2:evil", channel: "private-x" })).toThrow(TypeError);
   });
 });
+
+describe("presence intents over the server (for socket servers that do not stamp senders, e.g. Sockudo)", () => {
+  it("relays a cursor with the server-stamped sender, never the one a body claims", async () => {
+    const h = host();
+    const id = await liveSession(h);
+    const relayed = await h.cowork.intent(B, id, { intent: { kind: "cursor", route: "/", anchor: "title", fx: 0.5, fy: 0.5 }, from: "a", socketId: "3.4" } as never);
+    expect(relayed.status).toBe(202);
+    expect(h.broadcast).toHaveBeenLastCalledWith(
+      `presence-cowork.session.${id}`,
+      "cowork.intent",
+      expect.objectContaining({ from: "b", intent: { kind: "cursor", route: "/", anchor: "title", fx: 0.5, fy: 0.5 } }),
+      "3.4",
+    );
+  });
+
+  it("relays field activity, which carries a handle and never a value", async () => {
+    const h = host();
+    const id = await liveSession(h);
+    const relayed = await h.cowork.intent(A, id, { intent: { kind: "activity", handle: "card.number", active: true } });
+    expect(relayed.status).toBe(202);
+    expect(h.broadcast).toHaveBeenLastCalledWith(expect.any(String), "cowork.intent", expect.objectContaining({ from: "a", intent: { kind: "activity", handle: "card.number", active: true } }), undefined);
+  });
+
+  it("refuses the 11th cursor in a second with 429, and those cursors never spend the intent budget", async () => {
+    const h = host();
+    const id = await liveSession(h);
+    for (let i = 0; i < 10; i++) {
+      expect((await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/", x: i, y: i } })).status).toBe(202);
+    }
+    expect(await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/", x: 1, y: 1 } })).toEqual({ status: 429, body: { reason: "cowork.denied.rate" } });
+    for (let i = 0; i < 10; i++) {
+      expect((await h.cowork.intent(A, id, { intent: { kind: "scroll", y: i }, view: "a", revision: 0 })).status).toBe(202);
+    }
+  });
+
+  it("takes the cursor rate from the host's config", async () => {
+    const h = host({ config: () => ({ consent: "none", control: { mode: "free" }, rate: { cursorsPerSecond: 1 } }) });
+    const id = await liveSession(h);
+    expect((await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/", x: 1, y: 1 } })).status).toBe(202);
+    expect((await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/", x: 2, y: 2 } })).status).toBe(429);
+    h.tick(1000);
+    expect((await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/", x: 3, y: 3 } })).status).toBe(202);
+  });
+
+  it("changes no session state: a cursor does not move the view or bump the revision", async () => {
+    const h = host();
+    const id = await liveSession(h);
+    const before = await h.cowork.sync(A, id);
+    await h.cowork.intent(A, id, { intent: { kind: "cursor", route: "/elsewhere", x: 1, y: 1 } });
+    const after = await h.cowork.sync(A, id);
+    expect((after.body as { session: { participants: unknown } }).session.participants).toEqual((before.body as { session: { participants: unknown } }).session.participants);
+  });
+});

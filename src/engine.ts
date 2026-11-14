@@ -83,7 +83,7 @@ export const DEFAULT_CONFIG: SessionConfig = {
   control: { mode: "baton" },
   routing: "server",
   limits: { allow: [], deny: [], mask: [], viewOnly: [] },
-  rate: { intentsPerSecond: 10, visitsPerSecond: 1, appPerMinute: 30, startsPerMinute: 5 },
+  rate: { intentsPerSecond: 10, visitsPerSecond: 1, appPerMinute: 30, startsPerMinute: 5, cursorsPerSecond: 10 },
   size: { intentBytes: 8192, appBytes: 16384 },
   maxParticipants: 16,
 };
@@ -154,6 +154,13 @@ const isRef = (v: unknown): v is string =>
 /** True when `v` may be used as a ref: 1..256 chars, no control character, not a reserved name. */
 export const isValidRef = (v: unknown): v is string => isRef(v);
 const TOPIC = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
+/** A cursor's route: a path (starts with `/`), 1..2048, no control character. */
+const isCursorRoute = (v: unknown): v is string =>
+  typeof v === "string" && v.length >= 1 && v.length <= 2048 && v.startsWith("/") && !CONTROL_CHARS.test(v);
+/** A position inside an anchor's rect: finite, 0..1 inclusive. */
+const isFraction = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
+/** A document coordinate: finite, >= 0. */
+const isCoord = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const isViewKind = (kind: string): boolean => (VIEW_KINDS as readonly string[]).includes(kind);
 const has = (o: object, key: string) => Object.prototype.hasOwnProperty.call(o, key);
 
@@ -257,6 +264,13 @@ export function validIntent(intent: unknown, envelope: Envelope): intent is Inte
       return intent.op !== "grant" || isRef(intent.target);
     case "app":
       return typeof intent.topic === "string" && TOPIC.test(intent.topic) && has(intent, "payload");
+    case "cursor": {
+      if (!isCursorRoute(intent.route)) return false;
+      if (intent.anchor !== undefined) return isHandle(intent.anchor) && isFraction(intent.fx) && isFraction(intent.fy);
+      return isCoord(intent.x) && isCoord(intent.y);
+    }
+    case "activity":
+      return isHandle(intent.handle) && typeof intent.active === "boolean";
   }
 }
 
@@ -413,9 +427,16 @@ const control: Middleware = (ctx, intent, next) => {
 
 const within = (times: number[], now: number, windowMs: number) => times.filter((t) => t > now - windowMs).length;
 
+/** A cursor spends only its own bucket; every other intent spends the ordinary budget. */
+const isCursor = (intent: Intent): boolean => intent.kind === "cursor";
+
 const rateLimit: Middleware = (ctx, intent, next) => {
   const { rate } = ctx.config;
   const mine = ctx.session.rate[ctx.from] ?? { all: [], visit: [], app: [] };
+  if (isCursor(intent)) {
+    if (within(mine.cursor ?? [], ctx.now, 1000) >= rate.cursorsPerSecond) return refuse(REASONS.rate, 429);
+    return next();
+  }
   if (within(mine.all, ctx.now, 1000) >= rate.intentsPerSecond) return refuse(REASONS.rate, 429);
   if (intent.kind === "visit" && within(mine.visit, ctx.now, 1000) >= rate.visitsPerSecond) return refuse(REASONS.rate, 429);
   if (intent.kind === "app" && within(mine.app, ctx.now, 60000) >= rate.appPerMinute) return refuse(REASONS.rate, 429);
@@ -549,7 +570,8 @@ export async function evaluateIntent(host: EngineHost, state: SessionState, inpu
   const now = input.now;
   if (isReserved(input.from)) return refused(state, refuse(REASONS.unidentified, 401));
   const rate = (next.rate[input.from] ??= { all: [], visit: [], app: [] });
-  rate.all = [...rate.all.filter((t) => t > now - 1000), now];
+  if (isCursor(intent)) rate.cursor = [...(rate.cursor ?? []).filter((t) => t > now - 1000), now];
+  else rate.all = [...rate.all.filter((t) => t > now - 1000), now];
   if (intent.kind === "visit") rate.visit = [...rate.visit.filter((t) => t > now - 1000), now];
   if (intent.kind === "app") rate.app = [...rate.app.filter((t) => t > now - 60000), now];
   const view = envelope.view;

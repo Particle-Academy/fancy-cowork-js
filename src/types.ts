@@ -7,7 +7,7 @@
 export type Ref = string;
 export type MaybePromise<T> = T | Promise<T>;
 
-export const INTENT_KINDS = ["visit", "scroll", "field", "focus", "click", "submit", "control", "app"] as const;
+export const INTENT_KINDS = ["visit", "scroll", "field", "focus", "click", "submit", "control", "app", "cursor", "activity"] as const;
 export type IntentKind = (typeof INTENT_KINDS)[number];
 
 /** Kinds that act on a view: they need an envelope `view` and `revision`. */
@@ -24,7 +24,12 @@ export type Intent =
   | { kind: "click"; handle: string }
   | { kind: "submit"; handle: string }
   | { kind: "control"; op: ControlOp; target?: Ref }
-  | { kind: "app"; topic: string; payload: unknown };
+  | { kind: "app"; topic: string; payload: unknown }
+  // Presence intents: server-routed cursors and field activity, for socket servers that do
+  // not stamp a client event's sender (Sockudo). No view, no revision, no state.
+  | { kind: "cursor"; route: string; anchor: string; fx: number; fy: number }
+  | { kind: "cursor"; route: string; x: number; y: number }
+  | { kind: "activity"; handle: string; active: boolean };
 
 /** What travels with an intent. `from`, `session` and `at` are stamped by whoever runs the pipeline. */
 export type Envelope = {
@@ -60,7 +65,7 @@ export type SessionConfig = {
   control: ControlConfig;
   routing: Routing;
   limits: { allow: LimitRule[]; deny: LimitRule[]; mask: string[]; viewOnly: string[] };
-  rate: { intentsPerSecond: number; visitsPerSecond: number; appPerMinute: number; startsPerMinute: number };
+  rate: { intentsPerSecond: number; visitsPerSecond: number; appPerMinute: number; startsPerMinute: number; cursorsPerSecond: number };
   size: { intentBytes: number; appBytes: number };
   maxParticipants: number;
 };
@@ -104,7 +109,7 @@ export type SessionState = {
   /** Ranked control: last committed intent time per view, per sender. */
   last: Record<Ref, Record<Ref, number>>;
   /** Committed intent times per sender, for the rate windows. */
-  rate: Record<Ref, { all: number[]; visit: number[]; app: number[] }>;
+  rate: Record<Ref, { all: number[]; visit: number[]; app: number[]; cursor?: number[] }>;
 };
 
 export type Participant = { ref: Ref; label?: string; attributes?: Record<string, unknown>; actingFor?: Ref };

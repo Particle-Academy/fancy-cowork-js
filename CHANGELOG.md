@@ -46,6 +46,16 @@ First build (council change CC-fancy-0037). Not yet published.
 No third-party code: zero runtime dependencies. The dev dependencies are the kit's
 standard TypeScript toolchain (vitest, typescript, tsup, `@types/node`).
 
+- **Presence intents for socket servers that do not stamp senders.** Two intent kinds,
+  `cursor` (`route` plus `anchor`/`fx`/`fy` or `x`/`y`) and `activity` (`handle`,
+  `active`), so cursors and field activity can go through the server, which stamps the
+  authenticated sender, instead of presence whispers. Sockudo (Genie's WebSockets
+  service) never stamps a client event's sender, so it needs this. They are validated,
+  authorised (`intent:cursor`, `intent:activity`), size-limited and membership-checked
+  like every intent, change no session state, and skip limits, masking, revision and
+  control. A cursor spends only `rate.cursorsPerSecond` (new, default 10); an activity
+  spends the ordinary intent budget. Shared fixtures re-pinned at `e2bcca74...d6b5`.
+
 ### Security
 
 - **A peer-supplied ref can no longer reach `Object.prototype`** (code scanning alert 1,

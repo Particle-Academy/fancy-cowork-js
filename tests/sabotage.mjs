@@ -53,6 +53,16 @@ const MUTATIONS = [
   ["state maps keep their prototype", "engine.ts", "const clone = (value: SessionState): SessionState => harden(structuredClone(value));", "const clone = (value: SessionState): SessionState => structuredClone(value);"],
   ["fresh state has prototypes", "engine.ts", "  const participants = dict<ParticipantState>();", "  const participants: Record<Ref, ParticipantState> = {};"],
   ["server accepts a reserved identity", "server.ts", "if (!who || !isValidRef(who.ref))", 'if (!who || typeof who.ref !== "string" || !who.ref)'],
+  ["cursor kind unknown", "types.ts", '"app", "cursor", "activity"]', '"app", "activity"]'],
+  ["activity kind unknown", "types.ts", '"app", "cursor", "activity"]', '"app", "cursor"]'],
+  ["cursor route unchecked", "engine.ts", "      if (!isCursorRoute(intent.route)) return false;\n", ""],
+  ["cursor fraction unbounded", "engine.ts", "v >= 0 && v <= 1;", "v >= 0;"],
+  ["cursor coordinates unchecked", "engine.ts", "      return isCoord(intent.x) && isCoord(intent.y);", "      return true;"],
+  ["activity flag unchecked", "engine.ts", 'typeof intent.active === "boolean"', "true"],
+  ["cursors spend the intent budget", "engine.ts", "  if (isCursor(intent)) {\n    if (within(mine.cursor", "  if (false) {\n    if (within(mine.cursor"],
+  ["cursor bucket unlimited", "engine.ts", ">= rate.cursorsPerSecond)", ">= Infinity)"],
+  ["cursor commits into the intent budget", "engine.ts", "  else rate.all = [", "  rate.all = ["],
+  ["cursor default rate wrong", "engine.ts", "startsPerMinute: 5, cursorsPerSecond: 10 },", "startsPerMinute: 5, cursorsPerSecond: 100 },"],
 ];
 
 let survivors = 0;
