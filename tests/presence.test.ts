@@ -184,3 +184,53 @@ describe("one ref, one identity, through the handlers", () => {
     expect(session.participants.map((p) => p.ref)).toEqual(["user:1", "admin:7"]);
   });
 });
+
+describe("the re-sync says why a session ended (endReason)", () => {
+  const reason = async (h: ReturnType<typeof host>, id: string, as: Req) => {
+    const session = (await h.cowork.sync(as, id)).body as { session: Record<string, unknown> };
+    expect(Object.prototype.hasOwnProperty.call(session.session, "endReason")).toBe(true);
+    return session.session.endReason;
+  };
+
+  it("is null while the session is live", async () => {
+    const h = host();
+    const id = await live(h);
+    expect(await reason(h, id, B)).toBeNull();
+  });
+
+  it("says ended after an explicit end", async () => {
+    const h = host();
+    const id = await live(h);
+    expect((await h.cowork.end(A, id)).status).toBe(200);
+    expect(await reason(h, id, B)).toBe("ended");
+    // Stored, not inferred: the re-sync falls back to "ended" for a state without one.
+    expect((await h.store.read(id))!.endReason).toBe("ended");
+  });
+
+  it("says starter-left when the starter leaves or expires", async () => {
+    const left = host();
+    const id = await live(left);
+    await left.cowork.leave(A, id);
+    expect(await reason(left, id, B)).toBe("starter-left");
+
+    const expired = host();
+    const id2 = await live(expired);
+    expired.tick(60_000);
+    await expired.cowork.heartbeat(B, id2);
+    expired.tick(60_000);
+    expect(await reason(expired, id2, B)).toBe("starter-left");
+  });
+
+  it("says empty when a starterless session stays empty for emptyMs, and keeps it in the store", async () => {
+    const h = host({ presence: { endWhenStarterLeaves: false, emptyMs: 600_000 } });
+    const id = await live(h);
+    await h.cowork.leave(A, id);
+    await h.cowork.leave(B, id);
+    h.tick(1);
+    await h.cowork.prune();
+    h.tick(600_000);
+    await h.cowork.prune();
+    expect((await h.store.read(id))!.endReason).toBe("empty");
+    expect(await reason(h, id, A)).toBe("empty");
+  });
+});

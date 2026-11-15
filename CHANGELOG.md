@@ -10,10 +10,24 @@ upgrading.
 
 ## [Unreleased]
 
-First build (council change CC-fancy-0037). Not yet published.
+## [0.3.0] - 2026-11-15
+
+**The first published version** (council change CC-fancy-0037). Its contract matches
+`particle-academy/fancy-cowork` 0.4.0, the PHP leg; the version numbers differ only
+because 0.1.0 and 0.2.0 of this package were built and never published.
 
 ### Added
 
+- **`createPusherPublisher({ appId, key, secret, host, port, scheme, fetch? })`**: an
+  OPTIONAL `broadcast` for `createCowork` that publishes to any Pusher-protocol server's
+  HTTP API (Genie's WebSockets service, Sockudo, Reverb, Pusher), zero dependencies
+  (node:crypto, global fetch). Signed per the protocol (pinned to its documented example;
+  `pusherEventQuery` is exported), ASCII-only JSON bodies (some servers read the body as
+  Latin-1), the 10 KB payload limit, 100-channel chunks, the sender's socket excluded, a
+  429 retried after `Retry-After` (at most twice, 3 s in total), and sends one at a time
+  in order. A host with its own publisher keeps passing `broadcast`.
+- **`session.endReason` on the re-sync**: `ended` (an explicit end), `starter-left` or
+  `empty`, and `null` while live; also on `SessionState.endReason`.
 - **Generic co-work sessions**, the Node twin of `particle-academy/fancy-cowork`: one
   person driving another's view, several sharing one space, a support rep activating
   an anonymous visitor's request, editors on different pages of one document. **No

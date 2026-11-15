@@ -740,6 +740,7 @@ export async function evaluateEnd(host: EngineHost, state: SessionState, input: 
   const next = clone(state);
   next.state = "ended";
   next.endedAt = input.now;
+  next.endReason = "ended";
   next.revision += 1;
   return { decision: ALLOW, state: next, events: [{ type: "SessionEnded", session: next.id, ref: input.from, ...withActor(input), at: input.now }] };
 }
@@ -801,6 +802,7 @@ export function createSessionState(input: NewSessionInput): SessionState {
     revision: 0,
     createdAt: input.now,
     endedAt: null,
+    endReason: null,
     participants,
     control: dict<ViewControl>(),
     last: dict<Record<Ref, number>>(),
@@ -858,6 +860,7 @@ export function expireSession(
     const s = work();
     s.state = "ended";
     s.endedAt = now;
+    s.endReason = reason;
     s.revision += 1;
     events.push({ type: "SessionEnded", session: s.id, ref: s.starter, at: now, reason });
   };

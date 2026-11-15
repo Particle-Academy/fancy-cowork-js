@@ -131,6 +131,8 @@ export function publicSession(state: SessionState, config: SessionConfig, now?: 
   return {
     id: state.id,
     state: state.state,
+    // Why it ended ('ended', 'starter-left', 'empty'); null while live.
+    endReason: state.state === "ended" ? (state.endReason ?? "ended") : null,
     starter: state.starter,
     revision: state.revision,
     consent: config.consent,

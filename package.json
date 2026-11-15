@@ -1,6 +1,6 @@
 {
     "name": "@particle-academy/fancy-cowork",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "description": "Generic human co-work sessions for Node: host-resolved identity, membership and policy (everything denied until bound), per-participant views with follow and drive, an intent pipeline with pluggable middleware, channel auth and audit events. The Node twin of particle-academy/fancy-cowork. No chat, zero runtime dependencies.",
     "repository": {
         "type": "git",

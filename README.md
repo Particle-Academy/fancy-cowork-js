@@ -32,16 +32,19 @@ npm install @particle-academy/fancy-cowork
 ## Quick start
 
 ```ts
-import { createCowork, signPusherAuth } from "@particle-academy/fancy-cowork";
+import { createCowork, createPusherPublisher, signPusherAuth } from "@particle-academy/fancy-cowork";
 
 const cowork = createCowork<MyRequest>({
   identify: (req) => (req.session?.ref ? { ref: req.session.ref, label: req.session.name } : null),
   members: (session, p) => myPolicy.mayBeIn(session.id, p.ref),
   authorize: (p, ability, session, intent) => myPolicy.can(p.ref, ability, session.id),
   config: () => ({ consent: "notify", control: { mode: "baton" }, routing: "server" }),
-  // Publish to your Pusher-protocol server's HTTP API (Genie's WebSockets service, Sockudo,
-  // Reverb, Pusher). The PHP leg ships this client as its `fancy-pusher` driver.
-  broadcast: (channel, event, payload, exceptSocketId) => myPusherProtocolClient.trigger(channel, event, payload, exceptSocketId),
+  // Publish to any Pusher-protocol server's HTTP API (Genie's WebSockets service, Sockudo,
+  // Reverb, Pusher) with the built-in, zero-dependency publisher, or pass your own.
+  broadcast: createPusherPublisher({
+    appId: process.env.REVERB_APP_ID!, key: process.env.REVERB_APP_KEY!, secret: process.env.REVERB_APP_SECRET!,
+    host: process.env.REVERB_HOST!, port: Number(process.env.REVERB_PORT ?? 443), scheme: "https",
+  }).broadcast,
   onEvent: (event) => myAudit.write(event),
 });
 

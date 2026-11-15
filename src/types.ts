@@ -111,6 +111,8 @@ export type SessionState = {
   revision: number;
   createdAt: number;
   endedAt: number | null;
+  /** Why it ended: 'ended' (an explicit end), 'starter-left' or 'empty'. Absent or null while live. */
+  endReason?: EndReason | null;
   /** Live participants only, in join order. */
   participants: Record<Ref, ParticipantState>;
   /** Baton state per view (absent = the owner holds it, nobody queued). */
@@ -137,3 +139,6 @@ export type CoworkEvent =
   | { type: "ControlChanged"; session: string; ref: Ref; actingFor?: Ref; view: Ref; holder: Ref; op: ControlOp | "leave"; at: number }
   | { type: "IntentRelayed"; session: string; ref: Ref; actingFor?: Ref; id?: string; kind: IntentKind; view?: Ref; to?: Ref[]; at: number }
   | { type: "SessionEnded"; session: string; ref: Ref; actingFor?: Ref; at: number; reason?: "starter-left" | "empty" };
+
+/** Why a session ended, as the re-sync reports it in `session.endReason`. */
+export type EndReason = "ended" | "starter-left" | "empty";

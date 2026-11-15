@@ -80,6 +80,19 @@ const MUTATIONS = [
   ["reads skip expiry", "server.ts", "          const state = await expireStored(stored);\n          if (!options.members) return no(403, REASONS.unconfiguredMembers);\n          if ((await options.members!(state, who))", "          const state = stored;\n          if (!options.members) return no(403, REASONS.unconfiguredMembers);\n          if ((await options.members!(state, who))"],
   ["prune visits nothing", "server.ts", "      for (const id of await store.ids()) {", "      for (const id of [] as string[]) {"],
   ["online ignores lastSeen", "server.ts", "online: now - lastSeenOf(p) < idleMs", "online: true"],
+  ["end reason not set by end", "engine.ts", 'next.endReason = "ended";', ""],
+  ["end reason not set by presence", "engine.ts", "s.endReason = reason;", ""],
+  ["re-sync drops the end reason", "server.ts", 'endReason: state.state === "ended" ? (state.endReason ?? "ended") : null,', "endReason: null,"],
+  ["publisher: 429 not retried", "publisher.ts", "if (response.status === 429 && attempt < MAX_RETRIES) {", "if (false) {"],
+  ["publisher: retries unbounded", "publisher.ts", "export const MAX_RETRIES = 2;", "export const MAX_RETRIES = 5;"],
+  ["publisher: wait budget ignored", "publisher.ts", "if (waited + wait <= MAX_RETRY_WAIT_MS) {", "if (true) {"],
+  ["publisher: Retry-After ignored", "publisher.ts", "return Number(value) * 1000;", "return 0;"],
+  ["publisher: body not ASCII", "publisher.ts", "await post(event, asciiJson({", "await post(event, JSON.stringify({"],
+  ["publisher: no channel chunking", "publisher.ts", "const chunk = channels.slice(i, i + MAX_CHANNELS);", "const chunk = channels; i = channels.length;"],
+  ["publisher: sends not serialized", "publisher.ts", "const run = tail.then(task, task);", "const run = task();"],
+  ["publisher: no size limit", "publisher.ts", "if (bytes > MAX_DATA_BYTES) {", "if (false) {"],
+  ["publisher: socket id unchecked", "publisher.ts", "SOCKET_ID.test(exceptSocketId) ? exceptSocketId : undefined", "true ? exceptSocketId : undefined"],
+  ["publisher: refusal ignored", "publisher.ts", "if (response.ok) return;", "return;"],
 ];
 
 let survivors = 0;
