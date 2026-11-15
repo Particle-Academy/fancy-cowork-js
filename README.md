@@ -162,6 +162,37 @@ Pusher, which stamp senders.
 Channels: `presence-cowork.session.{id}` (membership and cursors; the member payload
 comes from the server), `private-cowork.participant.{ref}` (requests and activations).
 
+### One ref, one identity
+
+`ref` is the PERSON at the keyboard (`admin:7`); `actingFor` is the ACCOUNT they act in
+(`user:1`). When your own auth runs an admin inside a customer's account, `identify` must
+return the admin's ref with the customer as `actingFor`, never the customer's ref for both.
+A second identity on a live ref (the same `ref` with a different `actingFor`, absent
+counting as a value) is refused `cowork.denied.ref-in-use` 409, on `join`, on every intent
+and on `heartbeat`. Before this check, two browsers sharing one ref silently became one
+participant: one person shown, each one's writes skipped as its own, nobody ranked above
+anybody. The same person in a second tab (same `ref`, same `actingFor`) is allowed.
+
+### Live presence and expiry
+
+```ts
+const cowork = createCowork({
+  // ...the contracts...
+  presence: { idleMs: 120_000, emptyMs: 600_000, endWhenStarterLeaves: true }, // the defaults
+});
+// POST /cowork/sessions/:id/heartbeat -> cowork.heartbeat(req, id)   (204; clients send one every 30 s)
+// A scheduler, e.g. every minute:      await cowork.prune()           ({ checked, expired, ended })
+```
+
+A participant not seen for `idleMs` (no heartbeat, accepted join or accepted intent) is
+removed, with a `PeerLeft` event of reason `expired`. When the starter leaves or expires
+the session ends (`SessionEnded`, reason `starter-left`) unless you set
+`endWhenStarterLeaves: false`; a session empty for `emptyMs` ends too (reason `empty`). The
+policy is applied lazily on every read and write of a session, so nothing needs a
+scheduler to be correct; `prune()` only makes an untouched session end on time, and needs a
+store with `ids()` (`memoryStore()` has it). The re-sync response gives each participant
+`lastSeen` and `online`.
+
 ## Security model
 
 Default deny is the main control. Masking happens at the sender (a masked value never

@@ -37,6 +37,7 @@ describe("shared conformance fixtures", () => {
       for (const [i, step] of steps(c).entries()) {
         const now = step.at ?? 0;
         const from = step.from ?? "";
+        const actor = step.actingFor !== undefined ? { actingFor: step.actingFor } : {};
         if (step.op === "expectView") {
           const view = state.participants[step.view!];
           expect({ step: i, route: view?.route, revision: view?.revision }).toEqual({
@@ -55,8 +56,8 @@ describe("shared conformance fixtures", () => {
         let result;
         if (step.op === "intent") {
           const envelope = { ...(step.envelope ?? {}) } as Envelope;
-          result = await evaluateIntent(host, state, { from, envelope, intent: expand(step.intent) as Intent, now });
-        } else if (step.op === "join") result = await evaluateJoin(host, state, { from, now });
+          result = await evaluateIntent(host, state, { from, ...actor, envelope, intent: expand(step.intent) as Intent, now });
+        } else if (step.op === "join") result = await evaluateJoin(host, state, { from, ...actor, now });
         else if (step.op === "activate") result = await evaluateActivate(host, state, { from, now });
         else if (step.op === "consent") result = await evaluateConsent(host, state, { from, now });
         else if (step.op === "end") result = await evaluateEnd(host, state, { from, now });

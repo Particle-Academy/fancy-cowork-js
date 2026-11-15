@@ -96,6 +96,8 @@ export type ParticipantState = {
   revision: number;
   follows: Ref | null;
   joinedAt: number;
+  /** Last heartbeat, accepted join or accepted intent; `joinedAt` until the first. */
+  lastSeen?: number;
 };
 
 export type ViewControl = { holder: Ref; requests: Ref[] };
@@ -117,6 +119,8 @@ export type SessionState = {
   last: Record<Ref, Record<Ref, number>>;
   /** Committed intent times per sender, for the rate windows. */
   rate: Record<Ref, { all: number[]; visit: number[]; app: number[]; cursor?: number[] }>;
+  /** When the session last became empty; null or absent while anyone is in it. */
+  emptySince?: number | null;
 };
 
 export type Participant = { ref: Ref; label?: string; attributes?: Record<string, unknown>; actingFor?: Ref };
@@ -128,8 +132,8 @@ export type CoworkEvent =
   | { type: "SessionRequested"; session: string; ref: Ref; actingFor?: Ref; at: number }
   | { type: "SessionActivated"; session: string; ref: Ref; actingFor?: Ref; at: number }
   | { type: "PeerJoined"; session: string; ref: Ref; actingFor?: Ref; at: number }
-  | { type: "PeerLeft"; session: string; ref: Ref; actingFor?: Ref; at: number }
+  | { type: "PeerLeft"; session: string; ref: Ref; actingFor?: Ref; at: number; reason?: "expired" }
   | { type: "ConsentGiven"; session: string; ref: Ref; actingFor?: Ref; at: number }
   | { type: "ControlChanged"; session: string; ref: Ref; actingFor?: Ref; view: Ref; holder: Ref; op: ControlOp | "leave"; at: number }
   | { type: "IntentRelayed"; session: string; ref: Ref; actingFor?: Ref; id?: string; kind: IntentKind; view?: Ref; to?: Ref[]; at: number }
-  | { type: "SessionEnded"; session: string; ref: Ref; actingFor?: Ref; at: number };
+  | { type: "SessionEnded"; session: string; ref: Ref; actingFor?: Ref; at: number; reason?: "starter-left" | "empty" };

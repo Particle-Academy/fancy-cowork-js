@@ -42,6 +42,7 @@ export const REASONS = {
   notLive: "cowork.session.not-live",
   notRequested: "cowork.session.not-requested",
   membership: "cowork.denied.membership",
+  refInUse: "cowork.denied.ref-in-use",
   authorize: "cowork.denied.authorize",
   size: "cowork.denied.size",
   origin: "cowork.denied.origin",
@@ -301,6 +302,8 @@ const membership: Middleware = async (ctx, intent, next) => {
   for (const ref of refs) {
     if (!session.participants[ref] || !(await askMembers(host, ref))) return refuse(REASONS.membership, 403);
   }
+  // One ref, one identity: a sender whose actingFor differs from the participant's is another person.
+  if (!sameIdentity(session.participants[ctx.from]!.actingFor, ctx.actingFor)) return refuse(REASONS.refInUse, 409);
   return next();
 };
 
@@ -648,6 +651,13 @@ function participantFrom(input: OpInput): ParticipantState {
   };
 }
 
+/**
+ * One ref, one identity: `ref` is the person at the keyboard, `actingFor` the account
+ * they act in. A missing actingFor is a value of its own (null), so a person with one
+ * and a person without one on the same ref are two people.
+ */
+export const sameIdentity = (a: Ref | undefined | null, b: Ref | undefined | null): boolean => (a ?? null) === (b ?? null);
+
 const withActor = (input: OpInput) => (input.actingFor !== undefined ? { actingFor: input.actingFor } : {});
 
 async function membersGate(host: EngineHost, ref: Ref): Promise<Decision | null> {
@@ -666,7 +676,12 @@ async function abilityGate(host: EngineHost, ref: Ref, ability: string): Promise
 export async function evaluateJoin(host: EngineHost, state: SessionState, input: OpInput): Promise<Result> {
   const checks = prelude(host, input.from) ?? sessionGate(state) ?? (await membersGate(host, input.from)) ?? (await abilityGate(host, input.from, "join"));
   if (checks) return refused(state, checks);
-  if (state.participants[input.from]) return { decision: ALLOW, state, events: [] };
+  const existing = state.participants[input.from];
+  if (existing) {
+    // The same person in another tab is already here; anyone else on this ref is refused, never merged.
+    if (!sameIdentity(existing.actingFor, input.actingFor)) return refused(state, refuse(REASONS.refInUse, 409));
+    return { decision: ALLOW, state, events: [] };
+  }
   const config = host.config!;
   if (config.consent === "accept" && !state.consented && input.from !== subjectOf(state, config)) {
     return refused(state, refuse(REASONS.consentPending, 403));
@@ -791,4 +806,72 @@ export function createSessionState(input: NewSessionInput): SessionState {
     last: dict<Record<Ref, number>>(),
     rate: dict<{ all: number[]; visit: number[]; app: number[] }>(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Live presence and expiry (server side; plan section 11)
+// ---------------------------------------------------------------------------
+
+/** How long a participant may go unseen, how long an empty session lives, and whether the starter's leaving ends it. */
+export type PresencePolicy = { idleMs: number; emptyMs: number; endWhenStarterLeaves: boolean };
+
+export const DEFAULT_PRESENCE: Readonly<PresencePolicy> = Object.freeze({ idleMs: 120_000, emptyMs: 600_000, endWhenStarterLeaves: true });
+
+/** When a participant was last seen: its last heartbeat, accepted join or intent; else when it joined. */
+export const lastSeenOf = (p: ParticipantState): number => p.lastSeen ?? p.joinedAt;
+
+/** Record that `ref` was seen at `now`. The same state object when there is nothing to change. */
+export function touchParticipant(state: SessionState, ref: Ref, now: number): SessionState {
+  const p = state.participants[ref];
+  if (!p || p.lastSeen === now) return state;
+  const next = clone(state);
+  next.participants[ref]!.lastSeen = now;
+  return next;
+}
+
+/**
+ * Apply the presence policy at `now`: remove every participant unseen for
+ * `idleMs` (PeerLeft, reason expired), end the session when its starter is gone
+ * and `endWhenStarterLeaves` (reason starter-left), and end a session empty for
+ * `emptyMs` (reason empty). Pure: the same state object when nothing is due.
+ */
+export function expireSession(
+  state: SessionState,
+  now: number,
+  presence: PresencePolicy = DEFAULT_PRESENCE,
+): { state: SessionState; events: CoworkEvent[]; expired: number; ended: boolean } {
+  if (state.state === "ended") return { state, events: [], expired: 0, ended: false };
+  const due = Object.values(state.participants).filter((p) => now - lastSeenOf(p) >= presence.idleMs);
+  let next: SessionState | null = null;
+  const work = (): SessionState => (next ??= clone(state));
+  const events: CoworkEvent[] = [];
+
+  for (const p of due) {
+    const s = work();
+    removeParticipant(s, p.ref, now, events);
+    events.push({ type: "PeerLeft", session: s.id, ref: p.ref, ...(p.actingFor !== undefined ? { actingFor: p.actingFor } : {}), at: now, reason: "expired" });
+    s.revision += 1;
+  }
+
+  const current = next ?? state;
+  const end = (reason: "starter-left" | "empty") => {
+    const s = work();
+    s.state = "ended";
+    s.endedAt = now;
+    s.revision += 1;
+    events.push({ type: "SessionEnded", session: s.id, ref: s.starter, at: now, reason });
+  };
+  const empty = Object.keys(current.participants).length === 0;
+  if (presence.endWhenStarterLeaves && !current.participants[current.starter]) {
+    end("starter-left");
+  } else if (empty) {
+    const since = current.emptySince ?? null;
+    if (since === null) work().emptySince = now;
+    else if (now - since >= presence.emptyMs) end("empty");
+  } else if (current.emptySince !== undefined && current.emptySince !== null) {
+    work().emptySince = null;
+  }
+
+  const result = next ?? state;
+  return { state: result, events, expired: due.length, ended: result.state === "ended" };
 }

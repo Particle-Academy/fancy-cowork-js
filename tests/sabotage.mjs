@@ -66,6 +66,20 @@ const MUTATIONS = [
   ["cursor bucket unlimited", "engine.ts", ">= rate.cursorsPerSecond)", ">= Infinity)"],
   ["cursor commits into the intent budget", "engine.ts", "  else rate.all = [", "  rate.all = ["],
   ["cursor default rate wrong", "engine.ts", "startsPerMinute: 5, cursorsPerSecond: 10 },", "startsPerMinute: 5, cursorsPerSecond: 100 },"],
+  ["intent from a second identity accepted", "engine.ts", "  if (!sameIdentity(session.participants[ctx.from]!.actingFor, ctx.actingFor)) return refuse(REASONS.refInUse, 409);\n", ""],
+  ["join merges a second identity", "engine.ts", "    if (!sameIdentity(existing.actingFor, input.actingFor)) return refused(state, refuse(REASONS.refInUse, 409));\n", ""],
+  ["identity check always passes", "engine.ts", "=> (a ?? null) === (b ?? null);", "=> true;"],
+  ["participant expires a millisecond late", "engine.ts", "now - lastSeenOf(p) >= presence.idleMs", "now - lastSeenOf(p) > presence.idleMs"],
+  ["empty session ends a millisecond late", "engine.ts", "else if (now - since >= presence.emptyMs) end(\"empty\");", "else if (now - since > presence.emptyMs) end(\"empty\");"],
+  ["starter leaving never ends the session", "engine.ts", "if (presence.endWhenStarterLeaves && !current.participants[current.starter]) {", "if (false) {"],
+  ["starter-left ignores the host's choice", "engine.ts", "if (presence.endWhenStarterLeaves && !current.participants[current.starter]) {", "if (!current.participants[current.starter]) {"],
+  ["expiry event loses its reason", "engine.ts", "at: now, reason: \"expired\" });", "at: now });"],
+  ["an accepted operation is not a sign of life", "server.ts", "expireSession(touchParticipant(result.state, who.ref, at), at, presence);", "expireSession(result.state, at, presence);"],
+  ["heartbeat never refreshes", "server.ts", "          const touched = touchParticipant(state, who.ref, now());\n", "          const touched = state;\n"],
+  ["heartbeat accepts a second identity", "server.ts", "          if (!sameIdentity(joined.actingFor, who.actingFor)) return no(409, REASONS.refInUse);\n", ""],
+  ["reads skip expiry", "server.ts", "          const state = await expireStored(stored);\n          if (!options.members) return no(403, REASONS.unconfiguredMembers);\n          if ((await options.members!(state, who))", "          const state = stored;\n          if (!options.members) return no(403, REASONS.unconfiguredMembers);\n          if ((await options.members!(state, who))"],
+  ["prune visits nothing", "server.ts", "      for (const id of await store.ids()) {", "      for (const id of [] as string[]) {"],
+  ["online ignores lastSeen", "server.ts", "online: now - lastSeenOf(p) < idleMs", "online: true"],
 ];
 
 let survivors = 0;

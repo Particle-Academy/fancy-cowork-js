@@ -17,6 +17,8 @@ export interface CoworkStore {
   recordStart(ref: Ref, at: number): MaybePromise<void>;
   /** How many sessions are stored. Diagnostics and tests. */
   count(): MaybePromise<number>;
+  /** Every stored session id, so `prune()` can visit them. Optional: without it `prune()` reports `unsupported`. */
+  ids?(): MaybePromise<string[]>;
 }
 
 /** In-process store. Copies on the way in and out, so callers can never mutate stored state. */
@@ -52,5 +54,6 @@ export function memoryStore(): CoworkStore {
       starts.set(ref, [...kept, at]);
     },
     count: () => sessions.size,
+    ids: () => [...sessions.keys()],
   };
 }

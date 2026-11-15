@@ -73,7 +73,9 @@ describe("the middleware contract", () => {
   });
 
   it("an allowed intent records IntentRelayed with the sender's actingFor", async () => {
-    const result = await evaluateIntent(host({}), session(), { ...scroll, actingFor: "u-1" });
+    // The participant joined with the same actingFor: one ref, one identity.
+    const joinedActing = createSessionState({ id: "s", state: "live", starter: "a", participants: [{ ref: "a", route: "/", actingFor: "u-1" }], now: 0 });
+    const result = await evaluateIntent(host({}), joinedActing, { ...scroll, actingFor: "u-1" });
     expect(result.events).toEqual([{ type: "IntentRelayed", session: "s", ref: "a", actingFor: "u-1", kind: "scroll", view: "a", at: 0 }]);
   });
 

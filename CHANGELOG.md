@@ -61,6 +61,21 @@ standard TypeScript toolchain (vitest, typescript, tsup, `@types/node`).
   each person writes only their own view. Presence intents stay exempt. Shared fixtures
   re-pinned at `bcf40fb6...7106` in all three legs.
 
+- **One ref, one identity** (MOIC report): `ref` is the person, `actingFor` the account.
+  A second identity on a live ref is refused `cowork.denied.ref-in-use` (409) on `join`,
+  intents and `heartbeat`, instead of silently merging two browsers into one participant.
+  **Nothing to do** unless your `identify` returns the same `ref` for two different people
+  (an admin acting in a customer's account): return the admin's own ref, with the customer
+  as `actingFor`. Fixtures re-pinned at `ba7176ad...f973` (44 cases).
+- **Live presence and expiry**: `heartbeat(req, id)` (204), `prune()` for a scheduler, and
+  `presence: { idleMs = 120000, emptyMs = 600000, endWhenStarterLeaves = true }`. An
+  unseen participant is removed (`PeerLeft`, reason `expired`); a session ends when its
+  starter leaves (`SessionEnded`, reason `starter-left`) or after being empty for
+  `emptyMs` (reason `empty`). Applied lazily on every read and write. The re-sync gives
+  each participant `lastSeen` and `online`. `CoworkStore` gains an optional `ids()` for
+  `prune()`. **Behaviour change**: a session whose starter is gone now ends, by default; set
+  `endWhenStarterLeaves: false` to keep it for the others.
+
 ### Security
 
 - **A peer-supplied ref can no longer reach `Object.prototype`** (code scanning alert 1,

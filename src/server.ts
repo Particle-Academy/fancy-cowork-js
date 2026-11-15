@@ -18,6 +18,12 @@ import {
   type MiddlewareEntry,
   type PipelineContext,
   type Result,
+  type PresencePolicy,
+  DEFAULT_PRESENCE,
+  expireSession,
+  lastSeenOf,
+  sameIdentity,
+  touchParticipant,
   isValidRef,
 } from "./engine";
 import { memoryStore, type CoworkStore } from "./store";
@@ -67,10 +73,19 @@ export type CoworkOptions<Req = unknown> = {
   broadcast?: (channel: string, event: string, payload: Record<string, unknown>, exceptSocketId: string | undefined) => MaybePromise<void>;
   now?: () => number;
   newId?: () => string;
+  /**
+   * Live presence and expiry. A participant unseen (no heartbeat, accepted join or
+   * intent) for `idleMs` is removed; the session ends when its starter leaves
+   * (`endWhenStarterLeaves`) or once it has been empty for `emptyMs`. Applied
+   * lazily on every read and write, and by {@link Cowork.prune} for a scheduler.
+   */
+  presence?: Partial<PresencePolicy>;
 };
 
 export type IntentBody = { intent: Intent; view?: Ref; revision?: number; to?: Ref[]; id?: string; socketId?: string };
 export type DoctorReport = { ok: boolean; unbound: string[]; middleware: string[] };
+/** What `prune()` visited and did. `unsupported` when the store cannot list its sessions. */
+export type PruneReport = { checked: number; expired: number; ended: number; unsupported?: true };
 
 export interface Cowork<Req = unknown> {
   start(req: Req, body?: { route?: string }): Promise<CoworkResponse>;
@@ -83,17 +98,25 @@ export interface Cowork<Req = unknown> {
   follow(req: Req, id: string, body: { target: Ref | null }): Promise<CoworkResponse>;
   intent(req: Req, id: string, body: IntentBody): Promise<CoworkResponse>;
   sync(req: Req, id: string): Promise<CoworkResponse>;
+  /** A live participant says it is still here (204). Clients send one every `heartbeatMs`. */
+  heartbeat(req: Req, id: string): Promise<CoworkResponse>;
+  /** Apply the presence policy to every stored session; for a scheduler. Needs a store with `ids()`. */
+  prune(): Promise<PruneReport>;
   /** Channel auth for `presence-cowork.session.{id}` and `private-cowork.participant.{ref}`. Sign the answer with {@link signPusherAuth}. */
   authorizeChannel(req: Req, channelName: string): Promise<CoworkResponse>;
   doctor(): DoctorReport;
 }
 
 const no = (status: number, reason: string, extra: Record<string, unknown> = {}): CoworkResponse => ({ status, body: { reason, ...extra } });
-const SESSION_CHANNEL = /^presence-cowork\.session\.([A-Za-z0-9_-]{1,64})$/;
+const SESSION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const SESSION_CHANNEL =/^presence-cowork\.session\.([A-Za-z0-9_-]{1,64})$/;
 const PARTICIPANT_CHANNEL = /^private-cowork\.participant\.(.{1,256})$/;
 
-/** What a participant may see of a session: never rate counters or ranked timings. */
-export function publicSession(state: SessionState, config: SessionConfig): Record<string, unknown> {
+/**
+ * What a participant may see of a session: never rate counters or ranked timings.
+ * With `now`, each participant carries `lastSeen` and `online` (seen within `idleMs`).
+ */
+export function publicSession(state: SessionState, config: SessionConfig, now?: number, idleMs: number = DEFAULT_PRESENCE.idleMs): Record<string, unknown> {
   const participants = Object.values(state.participants).map((p) => ({
     ref: p.ref,
     ...(p.label !== undefined ? { label: p.label } : {}),
@@ -101,6 +124,7 @@ export function publicSession(state: SessionState, config: SessionConfig): Recor
     route: p.route,
     revision: p.revision,
     follows: p.follows,
+    ...(now !== undefined ? { lastSeen: lastSeenOf(p), online: now - lastSeenOf(p) < idleMs } : {}),
   }));
   const control: Record<Ref, unknown> = {};
   if (config.control.mode === "baton") for (const ref of Object.keys(state.participants)) control[ref] = holderOf(state, ref);
@@ -126,6 +150,7 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
       ? options.middleware([...DEFAULT_MIDDLEWARE])
       : (options.middleware ?? [...DEFAULT_MIDDLEWARE]);
   resolveStack(stack); // an unknown middleware name fails at construction, not at the first intent
+  const presence: PresencePolicy = { ...DEFAULT_PRESENCE, ...(options.presence ?? {}) };
 
   const emit = (events: CoworkEvent[]) => {
     for (const event of events) {
@@ -135,6 +160,16 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
         /* A host listener cannot undo a committed change. */
       }
     }
+  };
+
+  /** Apply the presence policy to a stored state, persisting and emitting what it changed. Call inside the session's lock. */
+  const expireStored = async (state: SessionState): Promise<SessionState> => {
+    const expired = expireSession(state, now(), presence);
+    if (expired.state !== state) {
+      await store.write(expired.state);
+      emit(expired.events);
+    }
+    return expired.state;
   };
 
   const guarded = async (fn: () => Promise<CoworkResponse>): Promise<CoworkResponse> => {
@@ -208,21 +243,27 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
       if (needsConfig && !options.config) return no(403, REASONS.unconfiguredConfig);
       if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) return no(404, "cowork.session.unknown");
       return store.withLock(id, async () => {
-        const state = await store.read(id);
-        if (!state) return no(404, "cowork.session.unknown");
+        const stored = await store.read(id);
+        if (!stored) return no(404, "cowork.session.unknown");
+        // Presence first: an expired participant or an abandoned session is decided before anything else.
+        const state = await expireStored(stored);
         const host = await hostFor(state, who);
         const result = await run(host, state, who);
         if (!result.decision.allow) {
           const { reason, status, blockedUntil } = result.decision;
           return no(status, reason, blockedUntil !== undefined ? { blockedUntil } : {});
         }
-        if (result.state !== state) await store.write(result.state);
-        emit(result.events);
+        // An accepted operation is a sign of life; then the policy again (a starter who just left ends it).
+        const at = now();
+        const after1 = expireSession(touchParticipant(result.state, who.ref, at), at, presence);
+        const committed = after1.state;
+        if (committed !== state) await store.write(committed);
+        emit([...result.events, ...after1.events]);
         const config = host.config ?? resolveConfig();
-        const custom = after ? await after(result, who, config) : undefined;
+        const custom = after ? await after({ ...result, state: committed }, who, config) : undefined;
         if (custom) return custom;
-        await options.broadcast?.(`presence-cowork.session.${id}`, "cowork.session", publicSession(result.state, config), undefined);
-        return { status: 200, body: { session: publicSession(result.state, config) } };
+        await options.broadcast?.(`presence-cowork.session.${id}`, "cowork.session", publicSession(committed, config, at, presence.idleMs), undefined);
+        return { status: 200, body: { session: publicSession(committed, config, at, presence.idleMs) } };
       });
     });
   }
@@ -324,13 +365,54 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
         const who = await identifyOrRefuse(req);
         if (isResponse(who)) return who;
         if (!options.config) return no(403, REASONS.unconfiguredConfig);
-        const state = await store.read(id);
-        if (!state) return no(404, "cowork.session.unknown");
-        if (!options.members) return no(403, REASONS.unconfiguredMembers);
-        if ((await options.members(state, who)) !== true) return no(403, REASONS.membership);
-        const config = resolveConfig(await options.config(state));
-        return { status: 200, body: { session: publicSession(state, config) } };
+        if (typeof id !== "string" || !SESSION_ID.test(id)) return no(404, "cowork.session.unknown");
+        return store.withLock(id, async () => {
+          const stored = await store.read(id);
+          if (!stored) return no(404, "cowork.session.unknown");
+          const state = await expireStored(stored);
+          if (!options.members) return no(403, REASONS.unconfiguredMembers);
+          if ((await options.members!(state, who)) !== true) return no(403, REASONS.membership);
+          const config = resolveConfig(await options.config!(state));
+          return { status: 200, body: { session: publicSession(state, config, now(), presence.idleMs) } };
+        });
       }),
+    heartbeat: (req, id) =>
+      guarded(async () => {
+        const who = await identifyOrRefuse(req);
+        if (isResponse(who)) return who;
+        if (typeof id !== "string" || !SESSION_ID.test(id)) return no(404, "cowork.session.unknown");
+        return store.withLock(id, async () => {
+          const stored = await store.read(id);
+          if (!stored) return no(404, "cowork.session.unknown");
+          const state = await expireStored(stored);
+          if (state.state === "ended") return no(410, REASONS.ended);
+          if (!options.members) return no(403, REASONS.unconfiguredMembers);
+          const joined = state.participants[who.ref];
+          if (!joined || (await options.members(state, who)) !== true) return no(403, REASONS.membership);
+          if (!sameIdentity(joined.actingFor, who.actingFor)) return no(409, REASONS.refInUse);
+          const touched = touchParticipant(state, who.ref, now());
+          if (touched !== state) await store.write(touched);
+          return { status: 204, body: {} };
+        });
+      }),
+    prune: async () => {
+      if (!store.ids) return { checked: 0, expired: 0, ended: 0, unsupported: true };
+      const report: PruneReport = { checked: 0, expired: 0, ended: 0 };
+      for (const id of await store.ids()) {
+        await store.withLock(id, async () => {
+          const stored = await store.read(id);
+          if (!stored) return;
+          report.checked += 1;
+          const result = expireSession(stored, now(), presence);
+          if (result.state === stored) return;
+          await store.write(result.state);
+          emit(result.events);
+          report.expired += result.expired;
+          if (result.ended) report.ended += 1;
+        });
+      }
+      return report;
+    },
     authorizeChannel: (req, channelName) =>
       guarded(async () => {
         const who = await identifyOrRefuse(req);
@@ -340,7 +422,11 @@ export function createCowork<Req = unknown>(options: CoworkOptions<Req> = {}): C
         const session = typeof channelName === "string" ? SESSION_CHANNEL.exec(channelName) : null;
         if (!session) return no(403, "cowork.denied.channel");
         if (!options.config) return no(403, REASONS.unconfiguredConfig);
-        const state = await store.read(session[1]!);
+        const sessionId = session[1]!;
+        const state = await store.withLock(sessionId, async () => {
+          const stored = await store.read(sessionId);
+          return stored ? expireStored(stored) : null;
+        });
         if (!state) return no(404, "cowork.session.unknown");
         if (state.state === "ended") return no(410, REASONS.ended);
         if (!options.members) return no(403, REASONS.unconfiguredMembers);
