@@ -14,6 +14,9 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const src = (name) => fileURLToPath(new URL(`../src/${name}`, import.meta.url));
 
 const MUTATIONS = [
+  ["ranked session scope ignored", "engine.ts", 'config.control.mode === "ranked" && config.control.scope === "session";', "false;"],
+  ["ranked scope always session", "engine.ts", 'config.control.mode === "ranked" && config.control.scope === "session";', "true;"],
+  ["session scope reads only one view", "engine.ts", "const views = sessionScope ? Object.values(session.last) : [session.last[view] ?? {}];", "const views = [session.last[view] ?? {}];"],
   ["membership never refuses", "engine.ts", "if (!session.participants[ref] || !(await askMembers(host, ref))) return refuse(REASONS.membership, 403);", ""],
   ["unbound authorize allows", "engine.ts", "if (!host.authorize) return refuse(REASONS.unconfiguredAuthorize, 403);\n  const abilities", "if (!host.authorize) return next();\n  const abilities"],
   ["drive never asked", "engine.ts", 'abilities.push("drive");', ";"],

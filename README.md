@@ -130,6 +130,15 @@ createCowork({
   the sender and again at every receiver, in the browser (agent-integrations). This
   package still authorises the channel.
 
+### Ranked scope: per view or the whole session
+
+`control: { mode: "ranked", rank, idleMs, scope }`. With `scope: "view"` (the default) a
+higher rank blocks a lower one only for intents into the view it acted on. With
+`scope: "session"`, a higher rank's intent on ANY view blocks every lower rank's view
+intents on every view until `idleMs` after its latest one: the mode for mirrored co-work
+(mutual follow plus shared fields), where each person writes only their own view.
+Presence intents (cursor, activity) are never blocked.
+
 ### Presence intents: cursors and field activity through the server
 
 Cursors and "field active" signals are lossy, but they still need a trustworthy

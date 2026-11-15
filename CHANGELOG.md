@@ -55,6 +55,11 @@ standard TypeScript toolchain (vitest, typescript, tsup, `@types/node`).
   like every intent, change no session state, and skip limits, masking, revision and
   control. A cursor spends only `rate.cursorsPerSecond` (new, default 10); an activity
   spends the ordinary intent budget. Shared fixtures re-pinned at `e2bcca74...d6b5`.
+- **Ranked control `scope: "session"`** (default `"view"`, so nothing changes unless you
+  set it): a higher rank's intent on any view blocks lower ranks on every view until
+  `idleMs`, with `blockedUntil` the latest across all views. For mirrored co-work, where
+  each person writes only their own view. Presence intents stay exempt. Shared fixtures
+  re-pinned at `bcf40fb6...7106` in all three legs.
 
 ### Security
 

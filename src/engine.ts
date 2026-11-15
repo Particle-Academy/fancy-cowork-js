@@ -415,10 +415,16 @@ const control: Middleware = (ctx, intent, next) => {
   if (mode === "ranked") {
     const idleMs = config.control.mode === "ranked" ? (config.control.idleMs ?? 3000) : 3000;
     const mine = rankOf(config, from);
+    // scope "session": a higher rank's last intent on ANY view counts (mirrored co-work,
+    // where each person writes only their own view). Anything else is per view.
+    const sessionScope = config.control.mode === "ranked" && config.control.scope === "session";
+    const views = sessionScope ? Object.values(session.last) : [session.last[view] ?? {}];
     let blockedUntil: number | undefined;
-    for (const [ref, at] of Object.entries(session.last[view] ?? {})) {
-      if (ref === from || rankOf(config, ref) <= mine || ctx.now - at >= idleMs) continue;
-      blockedUntil = Math.max(blockedUntil ?? 0, at + idleMs);
+    for (const times of views) {
+      for (const [ref, at] of Object.entries(times)) {
+        if (ref === from || rankOf(config, ref) <= mine || ctx.now - at >= idleMs) continue;
+        blockedUntil = Math.max(blockedUntil ?? 0, at + idleMs);
+      }
     }
     if (blockedUntil !== undefined) return refuse(REASONS.control, 409, { blockedUntil });
   }

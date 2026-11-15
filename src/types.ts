@@ -52,7 +52,14 @@ export type Routing = "server" | "direct";
 
 export type ControlConfig =
   | { mode: "free" }
-  | { mode: "ranked"; rank?: Record<Ref, number> | ((ref: Ref) => number); idleMs?: number }
+  | {
+      mode: "ranked";
+      rank?: Record<Ref, number> | ((ref: Ref) => number);
+      idleMs?: number;
+      /** "view" (default): a higher rank blocks only intents into the view it acted on.
+       * "session": a higher rank's intent on ANY view blocks lower ranks everywhere. */
+      scope?: "view" | "session";
+    }
   | { mode: "baton" };
 
 /** A limits rule. Every named criterion must match; see the README for "applicable". */
