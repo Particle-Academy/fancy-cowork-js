@@ -13,11 +13,16 @@ upgrading.
 ## [0.3.0] - 2026-11-15
 
 **The first published version** (council change CC-fancy-0037). Its contract matches
-`particle-academy/fancy-cowork` 0.4.0, the PHP leg; the version numbers differ only
+`particle-academy/fancy-cowork` 0.4.1, the PHP leg; the version numbers differ only
 because 0.1.0 and 0.2.0 of this package were built and never published.
 
 ### Added
 
+- **The re-sync publishes ranked control.** Under `control.mode: "ranked"`, `publicSession`
+  (`GET /cowork/sessions/{id}`) carries each participant's effective `rank` (0 for a ref the
+  config does not rank) and `control.scope` / `control.idleMs`, so a browser holds its person
+  without knowing other people's roles (agent-integrations 0.65.0). `rankedSummary(state,
+  config)` is exported. Shared fixtures `d036861f`.
 - **`createPusherPublisher({ appId, key, secret, host, port, scheme, fetch? })`**: an
   OPTIONAL `broadcast` for `createCowork` that publishes to any Pusher-protocol server's
   HTTP API (Genie's WebSockets service, Sockudo, Reverb, Pusher), zero dependencies

@@ -10,6 +10,7 @@ import {
   evaluateJoin,
   evaluateLeave,
   holderOf,
+  rankedSummary,
   type Envelope,
   type Intent,
   type SessionState,
@@ -45,6 +46,11 @@ describe("shared conformance fixtures", () => {
             route: step.route,
             revision: step.revision,
           });
+          continue;
+        }
+        if (step.op === "expectRanked") {
+          const summary = rankedSummary(state, host.config!);
+          expect({ step: i, ...summary, ranks: { ...summary?.ranks } }).toEqual({ step: i, ranks: step.ranks, scope: step.scope, idleMs: step.idleMs });
           continue;
         }
         if (step.op === "expectHolder") {

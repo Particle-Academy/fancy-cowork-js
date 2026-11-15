@@ -12,6 +12,7 @@ import {
   evaluateJoin,
   evaluateLeave,
   holderOf,
+  rankedSummary,
   resolveConfig,
   resolveStack,
   type EngineHost,
@@ -117,6 +118,8 @@ const PARTICIPANT_CHANNEL = /^private-cowork\.participant\.(.{1,256})$/;
  * With `now`, each participant carries `lastSeen` and `online` (seen within `idleMs`).
  */
 export function publicSession(state: SessionState, config: SessionConfig, now?: number, idleMs: number = DEFAULT_PRESENCE.idleMs): Record<string, unknown> {
+  // Ranked control: what a browser needs to hold its person without knowing anyone's role.
+  const ranked = rankedSummary(state, config);
   const participants = Object.values(state.participants).map((p) => ({
     ref: p.ref,
     ...(p.label !== undefined ? { label: p.label } : {}),
@@ -125,6 +128,7 @@ export function publicSession(state: SessionState, config: SessionConfig, now?: 
     revision: p.revision,
     follows: p.follows,
     ...(now !== undefined ? { lastSeen: lastSeenOf(p), online: now - lastSeenOf(p) < idleMs } : {}),
+    ...(ranked ? { rank: ranked.ranks[p.ref] ?? 0 } : {}),
   }));
   const control: Record<Ref, unknown> = {};
   if (config.control.mode === "baton") for (const ref of Object.keys(state.participants)) control[ref] = holderOf(state, ref);
@@ -138,7 +142,7 @@ export function publicSession(state: SessionState, config: SessionConfig, now?: 
     consent: config.consent,
     consented: state.consented,
     routing: config.routing,
-    control: { mode: config.control.mode, views: control },
+    control: { mode: config.control.mode, ...(ranked ? { scope: ranked.scope, idleMs: ranked.idleMs } : {}), views: control },
     participants,
   };
 }

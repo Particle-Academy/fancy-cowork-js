@@ -401,6 +401,21 @@ const rankOf = (config: SessionConfig, ref: Ref): number => {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 };
 
+/** What ranked control a server publishes on the re-sync. */
+export type RankedSummary = { ranks: Record<Ref, number>; scope: "view" | "session"; idleMs: number };
+
+/**
+ * Ranked control as a server publishes it on the re-sync: every participant's
+ * effective rank, the scope and the idle window. `null` unless the mode is ranked.
+ * A browser uses this instead of knowing other people's roles (fixture `expectRanked`).
+ */
+export function rankedSummary(state: SessionState, config: SessionConfig): RankedSummary | null {
+  if (config.control.mode !== "ranked") return null;
+  const ranks = dict<number>();
+  for (const ref of Object.keys(state.participants)) ranks[ref] = rankOf(config, ref);
+  return { ranks, scope: config.control.scope === "session" ? "session" : "view", idleMs: config.control.idleMs ?? 3000 };
+}
+
 const control: Middleware = (ctx, intent, next) => {
   const { config, session, from } = ctx;
   const mode = config.control.mode;
