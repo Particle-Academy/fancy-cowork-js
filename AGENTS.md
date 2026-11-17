@@ -1,48 +1,63 @@
-# fancy-cowork-js code map
+# Using @particle-academy/fancy-cowork — guide for agents
 
-`@particle-academy/fancy-cowork` is the Node leg of fancy-cowork (CC-fancy-0037): generic
-human co-work sessions. TypeScript, Node 22+, zero runtime dependencies, `node:crypto`
-only. The PHP leg is `particle-academy/fancy-cowork` (repo `fancy-cowork-php`); the
-browser side is in `@particle-academy/agent-integrations`.
+How an agent installs and uses this package in a consumer app. What the package
+is, is in [README.md](./README.md). Notes for working ON this repo's code are in
+[CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Where things are
-
-- `src/types.ts`: wire and state types (`Intent`, `Envelope`, `Decision`,
-  `SessionConfig`, `SessionState`, `CoworkEvent`).
-- `src/engine.ts`: the pure pipeline. `validIntent`, the ten default middleware
-  (`DEFAULTS`, `DEFAULT_MIDDLEWARE` order), `resolveStack`, `resolveConfig`,
-  `evaluateIntent` / `Join` / `Activate` / `Consent` / `End` / `Leave` / `Follow`,
-  `createSessionState`, `holderOf`, `globMatch`, `routeOf`, `isSameOriginPath`.
-- `src/server.ts`: `createCowork(options)`: framework-agnostic handlers returning
-  `{ status, body }`, start rate limit, channel auth, `doctor()`, `publicSession`.
-- `src/store.ts`: `CoworkStore` interface and `memoryStore()`.
-- `src/pusher.ts`: `signPusherAuth` (HMAC-SHA256, Pusher protocol).
-- `conformance/cowork-v1.json`: the shared fixtures. Byte-identical in the PHP repo and
-  in agent-integrations; pinned by SHA-256 in `tests/fixtures.ts`.
-- `tests/sabotage.mjs`: breaks one clause at a time; every mutation must be caught.
-
-## Invariants a change must keep
-
-- **Every unbound contract denies**, with its named reason. Nothing is allowed by
-  default; the `authorize` middleware can be removed but never configured to allow.
-- **No host model.** Participants are opaque refs. Nothing reads a user, org or role.
-- **Committed state changes only on a whole-pipeline allow.** The engine returns the
-  original state object on a refusal, and a new one on an allow.
-- **The server stamps the sender** from `identify`; nothing in a request body sets
-  `from`.
-- **Only `true` or `{ allow: true }` allows** from a host resolver or middleware; any
-  other answer refuses.
-- **Audit events never carry an intent's value or payload.**
-- **The fixtures decide.** A behaviour change is a fixture change, made in all three
-  repos at once with the SHA-256 re-pinned in each. Contract v1 is described in
-  `.ai/plans/human-cobrowse-and-chat.md` section 11 of the envelope.
-
-## Commands
+## Install
 
 ```bash
-npm install
-npm run lint        # tsc --noEmit
-npm test            # vitest
-npm run build       # tsup
-node tests/sabotage.mjs
+npm install @particle-academy/fancy-cowork
 ```
+
+- **Node:** `>=22`. Zero runtime dependencies (`node:crypto` only).
+- The npm name is `@particle-academy/fancy-cowork`; the repo is `fancy-cowork-js`.
+- The PHP twin is `particle-academy/fancy-cowork` (repo `fancy-cowork-php`). The
+  browser side (room hook, direct-routing client pipeline, multi-cursor presence,
+  session indicator) is in `@particle-academy/agent-integrations`.
+
+## Find it on the Fancy MCP server
+
+The catalog server is `https://ui.particle.academy/mcp` (streamable HTTP, no API
+key; MCP id `fancy-ui`). This package is not yet listed there; it appears once
+the registry carries it. Server-side packages are found with
+`search-backend-packages` (stack `node`).
+
+## API essentials
+
+- `createCowork(options)` returns framework-agnostic handlers, each resolving to
+  `{ status, body }`: `start`, `request`, `activate`, `join`, `consent`, `leave`,
+  `end`, `follow`, `intent`, `sync`, `authorizeChannel`, plus `doctor()`. Wire
+  them to your framework's routes (the README's Quick start shows Express-style
+  wiring).
+- **Host contracts** you bind: `identify`, `members`, `authorize`, `config`,
+  optional `middleware` and `store` (defaults to `memoryStore()`, one process).
+  `broadcast` publishes; `createPusherPublisher(...)` is the built-in publisher
+  for any Pusher-protocol server, and `signPusherAuth(...)` signs channel auth.
+- **Middleware:** `(ctx, intent, next) => Decision`. Default stack, each
+  removable by name: `membership`, `authorize`, `payloadSize`, `sameOrigin`,
+  `masking`, `limits`, `revision`, `control`, `rateLimit`, `audit`. Pass
+  `middleware: (defaults) => [...]` to extend it.
+- Config fields (`consent`, `subject`, `control`, `routing`, `limits`, `rate`,
+  `size`, `maxParticipants`) are tabled in the README. Every limit is
+  configurable.
+
+## Traps
+
+- **Nothing works until you bind it.** Every unbound contract refuses with a
+  named reason (`cowork.unconfigured.identity`, `.config`, `.members`,
+  `.authorize`). Call `doctor()` to list what is unbound.
+- **Only `true` or `{ allow: true }` allows** from a resolver or middleware; any
+  other answer refuses. The `authorize` middleware can be removed, never set to
+  allow by default.
+- **The server stamps the sender** from `identify`; nothing in a request body
+  sets `from`.
+- **There is no user, org, role or guest model.** A participant is an opaque ref;
+  an anonymous visitor is whatever ref your `identify` returns (for example a
+  signed guest token you issued).
+- **`memoryStore()` serialises per process only.** A multi-process host needs a
+  store whose `withLock` holds across processes.
+- **`app` payloads are untrusted data** for you to validate. In `direct` routing,
+  enforcement is only as good as each receiver's pipeline.
+- **Not chat.** There are no conversations or messages; the one message-shaped
+  thing is an opaque `app` intent the package never stores or interprets.

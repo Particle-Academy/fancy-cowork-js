@@ -16,6 +16,13 @@ Zero runtime dependencies. `node:crypto` only. Node 22+.
 npm install @particle-academy/fancy-cowork
 ```
 
+<!-- fancy-agents-note:start -->
+> **For agents.** Every Fancy package, this one included, is listed on the
+> Fancy MCP catalog server at `https://ui.particle.academy/mcp` (streamable HTTP, no API key;
+> MCP id `fancy-ui`), with install commands and docs. How an agent installs
+> and uses this package is in [AGENTS.md](https://github.com/Particle-Academy/fancy-cowork-js/blob/main/AGENTS.md).
+<!-- fancy-agents-note:end -->
+
 ## What it is not
 
 - **Not chat.** There are no conversations, messages, DM lists or contact policies. The
